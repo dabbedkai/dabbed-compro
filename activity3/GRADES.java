@@ -66,14 +66,20 @@ public class GRADES {
                 }
 
                 case 2 -> {
-                    System.out.printf("%-15s%-15s%-15s%-15s%n","SUBJECTS", "COMPRO2", "DSA2", "OOP2");
+                    System.out.printf("%n%-15s%-15s%-15s%-15s%n","SUBJECTS", "COMPRO2", "DSA2", "OOP2");
                     System.out.println("-------------------------------------------------------");
-                   System.out.printf("%-15s%-15s%-15s%-15s%n","PRELIMS", grades[0][0], grades[1][0], grades[2][0]);
-                   System.out.printf("%-15s%-15s%-15s%-15s%n","MIDTERMS", grades[0][1], grades[1][1], grades[2][1]);
-                   System.out.printf("%-15s%-15s%-15s%-15s%n","FINALS", grades[0][2], grades[1][2], grades[2][2]);
+
+                   for (int i = 0; i < grades.length; i++) {
+                    System.out.printf("%-15s", gradeCategory[i]);
+                      for (int j = 0; j < grades[i].length; j++) {
+                          System.out.printf("%-15s", grades[j][i]);
+                      }
+                      System.out.println();
+                   }
                 
                 }
 
+                
                 case 3 -> {
                     System.out.print("Thank you!");
                     System.exit(0);
