@@ -7,7 +7,7 @@ public class GRADES {
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
 
-        int[][] grades = new int[3][3];
+        int[][] grades = new int[50][3];
 
         String[] gradeCategory = {"PRELIMS", "MIDTERMS", "FINALS"};
 

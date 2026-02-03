@@ -1,0 +1,12 @@
+
+SUBJECTS       PRELIMS        MIDTERMS       FINALS         
+-------------------------------------------------------
+COMPRO1        90             90             909            
+
+COMPRO2        9              90             90             
+
+OOP            9              90             9              
+
+DSA            90             90             90             
+
+MMW            90             90             90             

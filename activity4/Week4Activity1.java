@@ -66,7 +66,7 @@ public class Week4Activity1 {
         try(FileWriter fw = new FileWriter("data.csv")){
 
             fw.write(sb.toString());
-
+            
         }catch(IOException e){
 
             System.out.println(e.getMessage());
