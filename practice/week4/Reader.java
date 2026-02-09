@@ -11,7 +11,7 @@ public class Reader {
 
         ArrayList<String> infos = new ArrayList<>();
         // Use try-with-resources to ensure the Scanner is closed automatically
-        try (Scanner myReader = new Scanner(new File("data.txt"))) {
+        try (Scanner myReader = new Scanner(new File("data.csv"))) {
             while (myReader.hasNextLine()) {
                 String data = myReader.nextLine();
                 infos.add(data);
