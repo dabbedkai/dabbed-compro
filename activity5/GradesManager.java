@@ -10,7 +10,6 @@ public class GradesManagerMethods {
 
     private int[][] grades = new int[50][3];
     private int gradeCounter = 0;
-    private StringBuilder sb = new StringBuilder();
     private List<String> gradeCategory = new ArrayList<>(50);
     private String[] gradeSemester = {"PRELIMS", "MIDTERMS", "FINALS"};
 
