@@ -2,7 +2,7 @@ package activity3;
 
 import java.util.*;
 
-public class GRADES {
+public class GradeSystem {
 
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);

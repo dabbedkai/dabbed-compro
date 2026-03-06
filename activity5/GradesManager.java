@@ -6,7 +6,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
 
-public class GradesManagerMethods {
+public class GradesManager {
 
     private int[][] grades = new int[50][3];
     private int gradeCounter = 0;
@@ -14,7 +14,7 @@ public class GradesManagerMethods {
     private String[] gradeSemester = {"PRELIMS", "MIDTERMS", "FINALS"};
 
     public static void main(String[] args) {
-        GradesManagerMethods manager = new GradesManagerMethods();
+        GradesManager manager = new GradesManager();
         manager.runGradeProgram();
     }
 
@@ -62,7 +62,7 @@ public class GradesManagerMethods {
 
         String line = String.format("%s,%d,%d,%d%n", gradeCategory.get(gradeCounter), grades[gradeCounter][0], grades[gradeCounter][1], grades[gradeCounter][2]);
 
-        try (FileWriter fw = new FileWriter("data.csv", true)) {
+        try (FileWriter fw = new FileWriter("grades.csv", true)) {
             fw.write(line);
         } catch (IOException e) {
             System.out.println(e.getMessage());
@@ -72,7 +72,7 @@ public class GradesManagerMethods {
     }
 
     public void viewGrades() {
-        try (Scanner myReader = new Scanner(new File("data.csv"))) {
+        try (Scanner myReader = new Scanner(new File("grades.csv"))) {
             if (!myReader.hasNextLine()) {
                 System.out.println("No grades found.");
             } else {
