@@ -71,9 +71,9 @@ public class Main {
         }
         jsonBuilder.append("]\n");
 
-        try (FileWriter fw = new FileWriter("data.json")) {
+        try (FileWriter fw = new FileWriter("grades/src/data/grades.json")) {
             fw.write(jsonBuilder.toString());
-            System.out.println("\nSuccessfully saved to data.json!");
+            System.out.println("\nSuccessfully saved to grades.json!");
         } catch (IOException e) {
             System.out.println("Error saving file: " + e.getMessage());
         }
