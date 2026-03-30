@@ -1,216 +1,368 @@
 package activity10;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import activity9.User;
+import java.io.*;
+import java.net.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.regex.*;
 
 public class HangmanServer {
 
     private static final String JSON_FILE = "users.json";
     private static List<User> users = new ArrayList<>();
-    private static User loggedInUser = null;
+
     public static void main(String[] args) {
+
         int port = 6767;
+        loadUsers();
 
-        try (ServerSocket server = new ServerSocket(port);
-                Scanner sc = new Scanner(System.in);) {
+        try (ServerSocket server = new ServerSocket(port)) {
 
-            System.out.println("Waiting for Player to connect...");
-            Socket player1 = server.accept();
-            System.out.println("Player 1 connected!");
-            PrintWriter out = new PrintWriter(player1.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(new InputStreamReader(player1.getInputStream()));
-            out.println("Welcome Player!");
-
-            out.println("Player has joined. Game starting!")
+            System.out.println("Hangman Server started! Waiting for clients...");
 
             while (true) {
-            System.out.println("\n=== HANGMAN LOGIN SYSTEM ===");
-            System.out.println("1. Login");
-            System.out.println("2. Register new account");
-            System.out.println("3. Exit");
-            System.out.print("Choose an option: ");
-            
-            String choice = sc.nextLine();
+                Socket client = server.accept();
+                System.out.println("New client connected: " + client.getInetAddress());
 
-            if (choice.equals("1")) {
-                if (login(sc)) {
-                    mainMenu(sc);
-                }
-            } else if (choice.equals("2")) {
-                register(sc);
-            } else if (choice.equals("3")) {
-                System.out.println("Goodbye!");
-                break;
-            } else {
-                System.out.println("Invalid choice. Try again.");
+                new Thread(new ClientHandler(client)).start();
             }
-        }
-        sc.close();
-    }
-
-            while (true) {
-
-                
         } catch (IOException e) {
             System.out.println("Server Exception: " + e.getMessage());
         }
     }
+    public static synchronized void saveUsers() {
 
-    public static void saveUsers() {
         try {
+
             StringBuilder sb = new StringBuilder("[\n");
+
             for (int i = 0; i < users.size(); i++) {
+
                 sb.append("  ").append(users.get(i).toJson());
+
                 if (i < users.size() - 1) sb.append(",");
                 sb.append("\n");
             }
+
             sb.append("]");
             Files.write(Paths.get(JSON_FILE), sb.toString().getBytes());
+
         } catch (IOException e) {
+
             System.out.println("Error saving user data.");
+
         }
     }
 
-    public static void loadUsers() {
+    public static synchronized void loadUsers() {
+
         users.clear();
+
         try {
-            String content = new String(Files.readAllBytes(Paths.get(JSON_FILE)));
+
+            Path path = Paths.get(JSON_FILE);
+
+            if (!Files.exists(path)) {
+
+                Files.write(path, "[]".getBytes());
+
+            }
+            String content = new String(Files.readAllBytes(path));
             
             Pattern p = Pattern.compile("\\{\"username\":\"(.*?)\", \"password\":\"(.*?)\", \"score\":(\\d+)\\}");
             Matcher m = p.matcher(content);
             
             while (m.find()) {
+
                 users.add(new User(m.group(1), m.group(2), Integer.parseInt(m.group(3))));
+
             }
         } catch (IOException e) {
+
             System.out.println("Error loading user data.");
+
         }
     }
 
-    public static void playGame(Scanner sc) {
-        System.out.println("\nSelect Difficulty:");
-        System.out.println("1. Easy\n2. Medium\n3. Hard");
-        System.out.print("Choice: ");
-        String diff = sc.nextLine();
+    public static synchronized boolean registerUser(String username, String password) {
 
-        String filename = "data/easy.txt";
-        int scoreReward = 10;
+        for (User u : users) {
 
-        if (diff.equals("2")) {
-            filename = "data/medium.txt";
-            scoreReward = 20;
-        } else if (diff.equals("3")) {
-            filename = "hard.txt";
-            scoreReward = 30;
+            if (u.getUsername().equals(username)) return false;
+
         }
 
-        List<String> words = readWordsFromFile(filename);
-        if (words.isEmpty()) {
-            System.out.println("Error: No words found in " + filename);
-            return;
-        }
+        users.add(new User(username, password, 0));
+        saveUsers();
+        return true;
+    }
 
-        String wordToGuess = words.get((int) (Math.random() * words.size())).toLowerCase();
-        int maxAttempts = 6;
-        int correctGuesses = 0;
-        char[] blankSpace = new char[wordToGuess.length()];
-        Arrays.fill(blankSpace, '_');
+    public static synchronized User authenticate(String username, String password) {
 
-        System.out.println("\nGame started! Difficulty: " + filename.replace(".txt", "").toUpperCase());
-
-        while (true) {
-            System.out.println("\nAttempts left: " + maxAttempts);
-            for (char c : blankSpace) {
-                System.out.print(c + " ");
-            }
-            System.out.print("\nChoose a letter to guess the word: ");
+        for (User u : users) {
             
-            String input = sc.nextLine().toLowerCase();
-            if (input.isEmpty()) continue;
-            char guess = input.charAt(0);
+            if (u.getUsername().equals(username) && u.getPassword().equals(password)) {
 
-            boolean found = false;
-            boolean alreadyGuessed = true;
+                return u;
 
-            for (int i = 0; i < wordToGuess.length(); i++) {
-                if (wordToGuess.charAt(i) == guess) {
-                    found = true;
-                    if (blankSpace[i] == '_') {
-                        blankSpace[i] = guess;
-                        correctGuesses++;
-                        alreadyGuessed = false;
-                    }
-                }
-            }
-
-            if (found) {
-                if (alreadyGuessed) {
-                    System.out.println("You already guessed '" + guess + "'.");
-                } else {
-                    System.out.println(guess + " is a great guess!");
-                }
-            } else {
-                System.out.println(guess + " is not in the word.");
-                maxAttempts--;
-            }
-
-            if (correctGuesses == wordToGuess.length()) {
-                System.out.println("\nCongratulations! You've guessed the word: " + wordToGuess);
-                System.out.println("You earned " + scoreReward + " points!");
-                loggedInUser.score += scoreReward;
-                saveUsers(); // Save updated score to JSON
-                break;
-            }
-
-            if (maxAttempts == 0) {
-                System.out.println("\nGame Over! The word was: " + wordToGuess);
-                break;
             }
         }
+
+        return null;
+    }
+
+    public static synchronized void updateScore(User user, int scoreReward) {
+
+        user.setScore(user.getScore() + scoreReward);
+        saveUsers();
+
     }
 
     public static List<String> readWordsFromFile(String filename) {
+
         try {
+
             return Files.readAllLines(Paths.get(filename));
+
         } catch (IOException e) {
-            return new ArrayList<>();
+
+            return Arrays.asList("apple", "banana", "computer", "java", "network");
+
         }
     }
+    private static class ClientHandler implements Runnable {
+        private Socket socket;
+        private User loggedInUser = null;
 
-     public static void mainMenu(Scanner sc) {
-        while (loggedInUser != null) {
-            System.out.println("\n=== MAIN MENU ===");
-            System.out.println("Player: " + loggedInUser.username + " | Score: " + loggedInUser.score);
-            System.out.println("1. Play Hangman");
-            System.out.println("2. Logout");
-            System.out.print("Choose an option: ");
-            
-            String choice = sc.nextLine();
+        public ClientHandler(Socket socket) {
+            this.socket = socket;
+        }
 
-            if (choice.equals("1")) {
-                playGame(sc);
-            } else if (choice.equals("2")) {
-                loggedInUser = null;
-                System.out.println("Logged out successfully.");
+        @Override
+        public void run() {
+
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
+
+                out.println("Welcome Player!");
+
+                while (true) {
+
+                    out.println("\n=== HANGMAN LOGIN SYSTEM ===");
+                    out.println("1. Login");
+                    out.println("2. Register new account");
+                    out.println("3. Exit");
+                    out.println("Choose an option: ");
+                    out.println("INPUT_REQUIRED");
+                    
+                    String choice = in.readLine();
+                    if (choice == null) break;
+
+                    if (choice.equals("1")) {
+
+                        if (login(in, out)) {
+                            mainMenu(in, out);
+                        }
+
+                    } else if (choice.equals("2")) {
+
+                        register(in, out);
+
+                    } else if (choice.equals("3")) {
+
+                        out.println("Goodbye!");
+                        out.println("QUIT");
+                        break;
+
+                    } else {
+
+                        out.println("Invalid choice. Try again.");
+
+                    }
+                }
+
+            } catch (IOException e) {
+
+                System.out.println("A client disconnected.");
+
+            }
+        }
+
+        private boolean login(BufferedReader in, PrintWriter out) throws IOException {
+
+            out.println("Enter username: ");
+            out.println("INPUT_REQUIRED");
+            String username = in.readLine();
+
+            out.println("Enter password: ");
+            out.println("INPUT_REQUIRED");
+            String password = in.readLine();
+
+            User user = authenticate(username, password);
+            if (user != null) {
+                
+                this.loggedInUser = user;
+                out.println("Login successful!");
+                return true;
+
             } else {
-                System.out.println("Invalid choice.");
+
+                out.println("Invalid username or password.");
+                return false;
+
+            }
+        }
+
+        private void register(BufferedReader in, PrintWriter out) throws IOException {
+
+            out.println("Enter new username: ");
+            out.println("INPUT_REQUIRED");
+            String username = in.readLine();
+
+            out.println("Enter new password: ");
+            out.println("INPUT_REQUIRED");
+            String password = in.readLine();
+
+            if (registerUser(username, password)) {
+
+                out.println("Registration successful! You can now login.");
+
+            } else {
+
+                out.println("Username already exists. Try another.");
+
+            }
+        }
+
+        private void mainMenu(BufferedReader in, PrintWriter out) throws IOException {
+
+            while (loggedInUser != null) {
+                out.println("\n=== MAIN MENU ===");
+                out.println("Player: " + loggedInUser.getUsername() + " | Score: " + loggedInUser.getScore());
+                out.println("1. Play Hangman");
+                out.println("2. Logout");
+                out.println("Choose an option: ");
+                out.println("INPUT_REQUIRED");
+
+                String choice = in.readLine();
+                if (choice == null) return;
+
+                if (choice.equals("1")) {
+
+                    playGame(in, out);
+
+                } else if (choice.equals("2")) {
+
+                    loggedInUser = null;
+                    out.println("Logged out successfully.");
+
+                } else {
+
+                    out.println("Invalid choice.");
+
+                }
+            }
+        }
+
+        private void playGame(BufferedReader in, PrintWriter out) throws IOException {
+            
+            out.println("\nSelect Difficulty:\n1. Easy\n2. Medium\n3. Hard\nChoice: ");
+            out.println("INPUT_REQUIRED");
+            String diff = in.readLine();
+            if (diff == null) return;
+
+            String filename = "easy.txt";
+            int scoreReward = 10;
+
+            if (diff.equals("2")) {
+
+                filename = "medium.txt";
+                scoreReward = 20;
+
+            } else if (diff.equals("3")) {
+
+                filename = "hard.txt";
+                scoreReward = 30;
+
+            }
+
+            List<String> words = readWordsFromFile(filename);
+
+            if (words.isEmpty()) {
+
+                out.println("Error: No words found.");
+                return;
+
+            }
+
+            String wordToGuess = words.get((int) (Math.random() * words.size())).toLowerCase();
+            int maxAttempts = 6;
+            int correctGuesses = 0;
+            char[] blankSpace = new char[wordToGuess.length()];
+            Arrays.fill(blankSpace, '_');
+
+            out.println("\nGame started! Difficulty: " + filename.replace(".txt", "").toUpperCase());
+
+            while (true) {
+
+                out.println("\nAttempts left: " + maxAttempts);
+                StringBuilder sb = new StringBuilder();
+                for (char c : blankSpace) sb.append(c).append(" ");
+                
+                out.println(sb.toString());
+                out.println("Choose a letter to guess the word: ");
+                out.println("INPUT_REQUIRED");
+
+                String input = in.readLine();
+                if (input == null) return;
+                if (input.isEmpty()) continue;
+                
+                char guess = input.toLowerCase().charAt(0);
+                boolean found = false;
+                boolean alreadyGuessed = true;
+
+                for (int i = 0; i < wordToGuess.length(); i++) {
+
+                    if (wordToGuess.charAt(i) == guess) {
+
+                        found = true;
+                        if (blankSpace[i] == '_') {
+                            blankSpace[i] = guess;
+                            correctGuesses++;
+                            alreadyGuessed = false;
+
+                        }
+                    }
+                }
+
+                if (found) {
+
+                    if (alreadyGuessed) out.println("You already guessed '" + guess + "'.");
+                    else out.println(guess + " is a great guess!");
+
+                } else {
+
+                    out.println(guess + " is not in the word.");
+                    maxAttempts--;
+
+                }
+
+                if (correctGuesses == wordToGuess.length()) {
+
+                    out.println("\nCongratulations! You've guessed the word: " + wordToGuess);
+                    out.println("You earned " + scoreReward + " points!");
+                    updateScore(loggedInUser, scoreReward);
+                    break;
+                    
+                }
+
+                if (maxAttempts == 0) {
+
+                    out.println("\nGame Over! The word was: " + wordToGuess);
+                    break;
+
+                }
             }
         }
     }
-
 }
-

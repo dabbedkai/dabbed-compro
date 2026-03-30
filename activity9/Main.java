@@ -8,9 +8,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Main {
-   private static final String JSON_FILE = "users.json";
-    private static List<User> users = new ArrayList<>();
-    private static User loggedInUser = null;
+    private static final String JSON_FILE = "users.json";
+        private static List<User> users = new ArrayList<>();
+        private static User loggedInUser = null;
 
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);

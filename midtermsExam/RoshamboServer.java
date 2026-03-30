@@ -1,4 +1,4 @@
-package activity10;
+package midtermsExam;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -60,9 +60,9 @@ public class RoshamboServer {
                 move2 = move2.toLowerCase();
 
                 String result = "";
-                if (!isValid(move1.charAt(0)) || !isValid(move2.charAt(0))) {
+                if (!isValid(move1) || !isValid(move2)) {
                     result = "Invalid input detected. Round canceled.";
-
+                    continue;
                 } else {
 
                     if (move1.equals(move2)) {
@@ -100,7 +100,7 @@ public class RoshamboServer {
         }
     }
 
-    private static boolean isValid(char c) {
-        return c == 'r' || c == 'p' || c == 's';
+    private static boolean isValid(String c) {
+        return c.equals("rock") || c.equals("paper") || c.equals("scissors") || c.equals("quit");
     }
 }

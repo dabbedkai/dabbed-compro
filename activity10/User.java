@@ -1,4 +1,4 @@
-package com.hangman;
+package activity10;
 
 public class User {
     
