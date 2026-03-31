@@ -1,4 +1,4 @@
-package activity10;
+package com.hangman;
 
 import java.io.*;
 import java.net.*;
@@ -24,7 +24,7 @@ public class Client {
                 if (serverMessage.equals("INPUT_REQUIRED")) {
                     String userInput = scanner.nextLine();
                     out.println(userInput);
-                    
+
                 } else if (serverMessage.equals("QUIT")) {
                     break;
                     
