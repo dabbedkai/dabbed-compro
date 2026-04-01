@@ -1,34 +1,9 @@
-package activity10;
+package com.hangman;
 
 public class User {
-    
-    String username;
-    String password;
-    int score;
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public int getScore() {
-        return score;
-    }
-
-    public void setScore(int score) {
-        this.score = score;
-    }
+    private String username;
+    private String password;
+    private int score;
 
     public User(String username, String password, int score) {
         this.username = username;
@@ -36,7 +11,12 @@ public class User {
         this.score = score;
     }
 
-    public String toJson() {
-            return String.format("{\"username\":\"%s\", \"password\":\"%s\", \"score\":%d}", username, password, score);
-        }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+
+    public int getScore() { return score; }
+    public void setScore(int score) { this.score = score; }
 }
