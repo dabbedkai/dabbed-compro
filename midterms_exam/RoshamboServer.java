@@ -3,6 +3,7 @@ package com.roshambo;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
+import com.roshambo.RoshamboResult;
 
 import java.io.*;
 import java.net.*;
@@ -11,8 +12,8 @@ import java.lang.reflect.Type;
 
 public class RoshamboServer {
 
-    private static final String JSON_FILE = "users.json";
-    private static ArrayList<User> users = new ArrayList<>();
+    private static final String JSON_FILE = "players.json";
+    private static ArrayList<Player> users = new ArrayList<>();
     
     // instantiate gson object
     private static Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -34,7 +35,6 @@ public class RoshamboServer {
             }
         } catch (IOException e) {
             System.out.println("Server exception: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
@@ -52,8 +52,8 @@ public class RoshamboServer {
         if (!f.exists()) return;
 
         try (FileReader reader = new FileReader(f)) {
-            Type userListType = new TypeToken<ArrayList<User>>(){}.getType();
-            ArrayList<User> loadedUsers = gson.fromJson(reader, userListType);
+            Type userListType = new TypeToken<ArrayList<Player>>(){}.getType();
+            ArrayList<Player> loadedUsers = gson.fromJson(reader, userListType);
             
             if (loadedUsers != null) {
                 users = loadedUsers;
@@ -63,21 +63,21 @@ public class RoshamboServer {
         }
     }
     
-    // registerUser checks for duplicate usernames and adds new users to the list, then saves to JSON
+    // registeruser checks for duplicate usernames and adds new users to the list, then saves to JSON
     public static synchronized boolean registerUser(String username, String password) {
-        for (User u : users) {
+        for (Player u : users) {
             if (u.getUsername().equalsIgnoreCase(username)) {
                 return false; // prevents duplicates
             }
         }
-        users.add(new User(username, password, 0));
+        users.add(new Player(username, password, 0));
         saveUsers();
         return true;
     }
 
     // authenticate checks if the provided credentials match any existing user and returns that user object if successful
-    public static synchronized User authenticate(String username, String password) {
-        for (User u : users) {
+    public static synchronized Player authenticate(String username, String password) {
+        for (Player u : users) {
             if (u.getUsername().equalsIgnoreCase(username) && u.getPassword().equals(password)) {
                 return u;
             }
@@ -85,10 +85,28 @@ public class RoshamboServer {
         return null;
     }
 
-    // updateScore modifies a user's score and persists the change to the JSON file
-    public static synchronized void updateScore(User user, int scoreReward) {
+    // updatescore modifies a user's score and persists the change to the JSON file
+    public static synchronized void updateScore(Player user, int scoreReward) {
         user.setScore(user.getScore() + scoreReward);
         saveUsers();
+    }
+    
+    public static synchronized void printLeaderboard(ClientHandler p1, ClientHandler p2) {
+        List<Player> sortedUsers = new ArrayList<>(users);
+        sortedUsers.sort((a, b) -> Integer.compare(b.getScore(), a.getScore()));
+        
+        StringBuilder lb = new StringBuilder("\n=== GLOBAL LEADERBOARD ===\n");
+        int rank = 1;
+        for (Player p : sortedUsers) {
+            lb.append(rank).append(". ").append(p.getUsername())
+              .append(" - Overall Match Wins: ").append(p.getScore()).append("\n");
+            rank++;
+        }
+        lb.append("==========================\n");
+        
+        String finalBoard = lb.toString();
+        p1.out.println(finalBoard);
+        p2.out.println(finalBoard);
     }
 
     // client handler class manages all interactions with a connected client, including login, registration, matchmaking, and gameplay
@@ -96,12 +114,11 @@ public class RoshamboServer {
         private Socket socket;
         public BufferedReader in;
         public PrintWriter out;
-        public User loggedInUser = null;
+        public Player loggedInUser = null;
 
         public ClientHandler(Socket s) {
             this.socket = s;
         }
-
 
         // main run method for the client handler thread
         @Override
@@ -148,7 +165,7 @@ public class RoshamboServer {
             }
         }
 
-        // executeLogin handles the login flow, prompting for credentials and authenticating against the user list
+        // executelogin handles the login flow, prompting for credentials and authenticating against the user list
         private boolean executeLogin() throws IOException {
             out.println("Username: ");
             out.println("INPUT_REQUIRED");
@@ -158,7 +175,7 @@ public class RoshamboServer {
             out.println("INPUT_REQUIRED");
             String pw = in.readLine();
 
-            User authResult = authenticate(username, pw);
+            Player authResult = authenticate(username, pw);
             if (authResult != null) {
                 loggedInUser = authResult;
                 out.println("Login Successful!");
@@ -168,7 +185,7 @@ public class RoshamboServer {
             return false;
         }
 
-        // executeRegister manages the account creation process, ensuring unique usernames and adding new users to the system
+        // executetegister manages the account creation process, ensuring unique usernames and adding new users to the system
         private void executeRegister() throws IOException {
             out.println("Enter New Username: ");
             out.println("INPUT_REQUIRED");
@@ -185,7 +202,7 @@ public class RoshamboServer {
             }
         }
 
-        // runMainMenu displays the main menu for logged-in users, allowing them to find matches or log out
+        // runmainmenu displays the main menu for logged-in users, allowing them to find matches or log out
         private void runMainMenu() throws IOException {
             while (loggedInUser != null) {
                 out.println("\n[ WELCOME " + loggedInUser.getUsername().toUpperCase() + " | WIN PTS: " + loggedInUser.getScore() + " ]");
@@ -208,7 +225,7 @@ public class RoshamboServer {
             }
         }
 
-        // findOpponent implements a simple matchmaking system where the first player waits and the second player triggers the match start, then runs the game logic in a new thread
+        // findopponent implements a simple matchmaking system where the first player waits and the second player triggers the match start, then runs the game logic in a new thread
         private void findOpponent() {
             ClientHandler opponent = null;
 
@@ -241,7 +258,7 @@ public class RoshamboServer {
         }
     }
 
-    // TwoPlayerGame is an abstract class that defines the structure for any two-player game, including methods for broadcasting messages, handling player quits, validating moves, and evaluating winners. RoshamboMatch extends this class to implement the specific logic for Rock-Paper-Scissors.
+    // twoplayergame is an abstract class that defines the structure for any two-player game, including methods for broadcasting messages, handling player quits, validating moves, and evaluating winners. RoshamboMatch extends this class to implement the specific logic for Rock-Paper-Scissors.
     public static abstract class TwoPlayerGame implements Runnable {
         protected ClientHandler p1;
         protected ClientHandler p2;
@@ -264,7 +281,7 @@ public class RoshamboServer {
         public abstract String evaluateWinner(String m1, String m2);
     }
 
-    // RoshamboMatch implements the specific game logic for Rock-Paper-Scissors, including move validation, winner evaluation, and the main game loop that handles player interactions and score updates
+    // roshambomatch implements the specific game logic for roshambo, including move validation, winner evaluation, and the main game loop that handles player interactions and score updates
     public static class RoshamboMatch extends TwoPlayerGame {
         
         public RoshamboMatch(ClientHandler p1, ClientHandler p2) {
@@ -273,30 +290,44 @@ public class RoshamboServer {
 
         @Override
         public boolean isValidMove(String c) {
-            return c.equals("rock") || c.equals("paper") || c.equals("scissors");
+            return c.equals("0") || c.equals("1") || c.equals("2");
+        }
+        
+        private String getActionName(String c) {
+            switch(c) {
+                case "0": return "Rock";
+                case "1": return "Paper";
+                case "2": return "Scissors";
+                default: return "Unknown";
+            }
         }
 
         @Override
         public String evaluateWinner(String m1, String m2) {
             if (m1.equals(m2)) return "DRAW";
             
-            if ((m1.equals("rock") && m2.equals("scissors")) ||
-                (m1.equals("paper") && m2.equals("rock")) ||
-                (m1.equals("scissors") && m2.equals("paper"))) {
+            // map 0 = Rock, 1 = Paper, 2 = Scissors
+            if ((m1.equals("0") && m2.equals("2")) ||
+                (m1.equals("1") && m2.equals("0")) ||
+                (m1.equals("2") && m2.equals("1"))) {
                 return "P1";
             }
             return "P2";
         }
         
-        // main game loop for the Roshambo match, handling move input, validation, result evaluation, score updates, and broadcasting results to both players
+        // main game loop for the roshambo game, handling move input, validation, result evaluation, score updates, and showing results to both players
         @Override
         public void run() {
             try {
-                boolean matchOngoing = true;
+                int p1RoundWins = 0;
+                int p2RoundWins = 0;
+
+                broadcast("=== STARTING 10 ROUND MATCH ===");
 
                 // game loop continues until a player quits or disconnects, handling move input and result evaluation each round
-                while (matchOngoing) {
-                    p2.out.println("\nWaiting for Player 1 to make a move...");
+                for(int round = 1; round <= 10; round++) {
+                    broadcast("\n-- ROUND " + round + " --");
+                    p2.out.println("Waiting for Player 1 to make a move...");
                     p1.out.println("\nYOUR_TURN_RPS");
 
                     String move1 = p1.in.readLine();
@@ -316,29 +347,57 @@ public class RoshamboServer {
                     move2 = move2.trim().toLowerCase();
 
                     if (!isValidMove(move1) || !isValidMove(move2)) {
-                        broadcast("Invalid inputs detected. Round nullified.");
+                        broadcast("Invalid inputs detected. Round nullified and repeating round.");
+                        round--; // Retry this round
                         continue;
                     }
+                    
+                    String act1 = getActionName(move1);
+                    String act2 = getActionName(move2);
 
                     String resultString = evaluateWinner(move1, move2);
                     broadcast("--- ROUND RESULTS ---");
                     
                     if (resultString.equals("DRAW")) {
-                        broadcast("It's a Tie! Both picked " + move1);
+                        broadcast("It's a Tie! Both picked " + act1);
                     } else if (resultString.equals("P1")) {
-                        p1.out.println("You won! " + move1 + " beats " + move2);
-                        p2.out.println("You lost. " + move1 + " beats " + move2);
-                        updateScore(p1.loggedInUser, 10);
-                        broadcast(p1.loggedInUser.getUsername() + " earned +10 PTS!");
+                        p1RoundWins++;
+                        p1.out.println("You won the round! " + act1 + " beats " + act2);
+                        p2.out.println("You lost the round. " + act1 + " beats " + act2);
                     } else if (resultString.equals("P2")) {
-                        p2.out.println("You won! " + move2 + " beats " + move1);
-                        p1.out.println("You lost. " + move2 + " beats " + move1);
-                        updateScore(p2.loggedInUser, 10);
-                        broadcast(p2.loggedInUser.getUsername() + " earned +10 PTS!");
+                        p2RoundWins++;
+                        p2.out.println("You won the round! " + act2 + " beats " + act1);
+                        p1.out.println("You lost the round. " + act2 + " beats " + act1);
                     }
 
-                    broadcast("---------------------");
+                    broadcast("CURRENT SCORE: " + p1.loggedInUser.getUsername() + "[" + p1RoundWins + "] vs " + 
+                              p2.loggedInUser.getUsername() + "[" + p2RoundWins + "]");
                 }
+
+                // Lab Constraint Logic Location - Handle final evaluation outside of round looping
+                String overallWinner;
+                if (p1RoundWins > p2RoundWins) {
+                    overallWinner = p1.loggedInUser.getUsername();
+                    updateScore(p1.loggedInUser, 1); 
+                } else if (p2RoundWins > p1RoundWins) {
+                    overallWinner = p2.loggedInUser.getUsername();
+                    updateScore(p2.loggedInUser, 1);
+                } else {
+                    overallWinner = "Tie - No overall winner points awarded.";
+                }
+
+                RoshamboResult matchFinalRecord = new RoshamboResult(
+                    p1.loggedInUser.getUsername(),
+                    p2.loggedInUser.getUsername(),
+                    p1RoundWins, p2RoundWins,
+                    overallWinner
+                );
+
+                broadcast("\n===== THE 10 ROUND MATCH IS OVER! =====");
+                broadcast(matchFinalRecord.getFormattedSummary());
+                
+                // displays global json scoreboard  
+                printLeaderboard(p1, p2); 
 
             } catch (IOException e) {
                 System.out.println("Connection failed mid-game.");
