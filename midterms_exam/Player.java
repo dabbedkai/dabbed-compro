@@ -1,14 +1,24 @@
 package com.roshambo;
 
-// inheritance from account to represent a user with specific properties like score
-public class Player extends Account {
-    private int score; // used for total match victories
+public class RoshamboResult {
+    private String player1;
+    private String player2;
+    private int p1RoundsWon;
+    private int p2RoundsWon;
+    private String matchWinner;
 
-    public Player(String username, String password, int score) {
-        super(username, password); 
-        this.score = score;
+    // constructor to initialize the match result 
+    public RoshamboResult(String player1, String player2, int p1RoundsWon, int p2RoundsWon, String matchWinner) {
+        this.player1 = player1;
+        this.player2 = player2;
+        this.p1RoundsWon = p1RoundsWon;
+        this.p2RoundsWon = p2RoundsWon;
+        this.matchWinner = matchWinner;
     }
 
-    public int getScore() { return score; }
-    public void setScore(int score) { this.score = score; }
+    // formats the match result into a readable string for display or logging purposes
+    public String getFormattedSummary() {
+        return "MATCH RESULT: [" + player1 + ": " + p1RoundsWon + " pts] VS [" + 
+               player2 + ": " + p2RoundsWon + " pts] -> WINNER: " + matchWinner;
+    }
 }

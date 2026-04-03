@@ -25,23 +25,30 @@ public class RoshamboServer {
         int port = 6767;
         loadUsers();
 
-        try (ServerSocket server = new ServerSocket(port)) {
+        try {
+            ServerSocket server = new ServerSocket(port);
             System.out.println("Roshambo Matchmaking Server Online! Listening on port " + port);
 
             while (true) {
                 Socket client = server.accept();
                 System.out.println("New player connected: " + client.getInetAddress().getHostAddress());
-                new Thread(new ClientHandler(client)).start();
+                
+                ClientHandler ch = new ClientHandler(client);
+                Thread thread = new Thread(ch);
+                thread.start();
             }
-        } catch (IOException e) {
-            System.out.println("Server exception: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("Server exception: ");
+            e.printStackTrace();
         }
     }
 
 
     public static synchronized void saveUsers() {
-        try (FileWriter writer = new FileWriter(JSON_FILE)) {
+        try {
+            FileWriter writer = new FileWriter(JSON_FILE);
             gson.toJson(users, writer); // automatically writes the entire array as json to the file
+            writer.close();
         } catch (IOException e) {
             System.out.println("Error saving user state locally.");
         }
@@ -49,15 +56,19 @@ public class RoshamboServer {
 
     public static synchronized void loadUsers() {
         File f = new File(JSON_FILE);
-        if (!f.exists()) return;
+        if (!f.exists()) {
+            return;
+        }
 
-        try (FileReader reader = new FileReader(f)) {
+        try {
+            FileReader reader = new FileReader(f);
             Type userListType = new TypeToken<ArrayList<Player>>(){}.getType();
             ArrayList<Player> loadedUsers = gson.fromJson(reader, userListType);
             
             if (loadedUsers != null) {
                 users = loadedUsers;
             }
+            reader.close();
         } catch (Exception e) {
             System.out.println("Failed to read JSON Database.");
         }
@@ -65,19 +76,24 @@ public class RoshamboServer {
     
     // registeruser checks for duplicate usernames and adds new users to the list, then saves to JSON
     public static synchronized boolean registerUser(String username, String password) {
-        for (Player u : users) {
+        for (int i = 0; i < users.size(); i++) {
+            Player u = users.get(i);
             if (u.getUsername().equalsIgnoreCase(username)) {
                 return false; // prevents duplicates
             }
         }
-        users.add(new Player(username, password, 0));
+        
+        Player newP = new Player(username, password, 0, 0);
+        users.add(newP);
         saveUsers();
+        
         return true;
     }
 
     // authenticate checks if the provided credentials match any existing user and returns that user object if successful
     public static synchronized Player authenticate(String username, String password) {
-        for (Player u : users) {
+        for (int i = 0; i < users.size(); i++) {
+            Player u = users.get(i);
             if (u.getUsername().equalsIgnoreCase(username) && u.getPassword().equals(password)) {
                 return u;
             }
@@ -86,27 +102,67 @@ public class RoshamboServer {
     }
 
     // updatescore modifies a user's score and persists the change to the JSON file
-    public static synchronized void updateScore(Player user, int scoreReward) {
-        user.setScore(user.getScore() + scoreReward);
+    public static synchronized void updatePlayerStats(Player user, boolean isWinner) {
+        // increase total matches played for this user no matter what
+        user.setMatchesPlayed(user.getMatchesPlayed() + 1);
+        
+        // increase their score (win tally) only if they actually won
+        if (isWinner == true) {
+            int current = user.getScore();
+            user.setScore(current + 1);
+        }
+        
         saveUsers();
     }
     
     public static synchronized void printLeaderboard(ClientHandler p1, ClientHandler p2) {
         List<Player> sortedUsers = new ArrayList<>(users);
-        sortedUsers.sort((a, b) -> Integer.compare(b.getScore(), a.getScore()));
         
-        StringBuilder lb = new StringBuilder("\n=== GLOBAL LEADERBOARD ===\n");
+        // loop sorting to order by win rate percentage
+        for (int i = 0; i < sortedUsers.size(); i++) {
+            for (int j = i + 1; j < sortedUsers.size(); j++) {
+                
+                double winRateA = sortedUsers.get(i).getWinRate();
+                double winRateB = sortedUsers.get(j).getWinRate();
+                
+                // sort highest to lowest win rate
+                if (winRateA < winRateB) {
+                    Player temp = sortedUsers.get(i);
+                    sortedUsers.set(i, sortedUsers.get(j));
+                    sortedUsers.set(j, temp);
+                } 
+                // if there is a tie, let the player with more actual games played take higher rank
+                else if (winRateA == winRateB) {
+                    int gamesA = sortedUsers.get(i).getMatchesPlayed();
+                    int gamesB = sortedUsers.get(j).getMatchesPlayed();
+                    
+                    if (gamesA < gamesB) {
+                        Player temp = sortedUsers.get(i);
+                        sortedUsers.set(i, sortedUsers.get(j));
+                        sortedUsers.set(j, temp);
+                    }
+                }
+            }
+        }
+        
+        String lb = "\n=== GLOBAL LEADERBOARD (WIN RATE) ===\n";
         int rank = 1;
-        for (Player p : sortedUsers) {
-            lb.append(rank).append(". ").append(p.getUsername())
-              .append(" - Overall Match Wins: ").append(p.getScore()).append("\n");
+        
+        for (int i = 0; i < sortedUsers.size(); i++) {
+            Player p = sortedUsers.get(i);
+            
+            // round the win rate to 1 decimal place for display purposes
+            double wrRaw = p.getWinRate();
+            double roundedWr = Math.round(wrRaw * 10.0) / 10.0;
+            
+            lb += rank + ". " + p.getUsername() + " - " + roundedWr + "% (" + p.getScore() + "W / " + p.getMatchesPlayed() + " Total)\n";
             rank++;
         }
-        lb.append("==========================\n");
         
-        String finalBoard = lb.toString();
-        p1.out.println(finalBoard);
-        p2.out.println(finalBoard);
+        lb += "=====================================\n";
+        
+        p1.out.println(lb);
+        p2.out.println(lb);
     }
 
     // client handler class manages all interactions with a connected client, including login, registration, matchmaking, and gameplay
@@ -130,18 +186,23 @@ public class RoshamboServer {
                 out.println("Connection Established!");
 
                 boolean running = true;
-                while (running) {
+                while (running == true) {
                     out.println("\n--- ROSHAMBO PVP SERVER ---");
                     out.println("1. Login\n2. Create an Account\n3. Quit");
                     out.println("Option: ");
                     out.println("INPUT_REQUIRED");
 
                     String choice = in.readLine();
-                    if (choice == null) break;
+                    if (choice == null) {
+                        break;
+                    }
 
                     switch (choice) {
                         case "1":
-                            if (executeLogin()) runMainMenu();
+                            boolean logged = executeLogin();
+                            if (logged == true) {
+                                runMainMenu();
+                            }
                             break;
                         case "2":
                             executeRegister();
@@ -160,7 +221,9 @@ public class RoshamboServer {
                 System.out.println("A player dropped connection.");
             } finally {
                 synchronized (RoshamboServer.class) {
-                    if (waitingPlayer == this) waitingPlayer = null;
+                    if (waitingPlayer == this) {
+                        waitingPlayer = null;
+                    }
                 }
             }
         }
@@ -181,6 +244,7 @@ public class RoshamboServer {
                 out.println("Login Successful!");
                 return true;
             }
+            
             out.println("Incorrect login credentials.");
             return false;
         }
@@ -205,7 +269,10 @@ public class RoshamboServer {
         // runmainmenu displays the main menu for logged-in users, allowing them to find matches or log out
         private void runMainMenu() throws IOException {
             while (loggedInUser != null) {
-                out.println("\n[ WELCOME " + loggedInUser.getUsername().toUpperCase() + " | WIN PTS: " + loggedInUser.getScore() + " ]");
+                double dispRateRaw = loggedInUser.getWinRate();
+                double dispRateRound = Math.round(dispRateRaw * 10.0) / 10.0;
+                
+                out.println("\n[ WELCOME " + loggedInUser.getUsername().toUpperCase() + " | WIN RATE: " + dispRateRound + "% ]");
                 out.println("1. Find Match (PvP)\n2. Logout");
                 out.println("Choice: ");
                 out.println("INPUT_REQUIRED");
@@ -290,28 +357,30 @@ public class RoshamboServer {
 
         @Override
         public boolean isValidMove(String c) {
-            return c.equals("0") || c.equals("1") || c.equals("2");
+            if (c.equals("0") || c.equals("1") || c.equals("2")) {
+                return true;
+            }
+            return false;
         }
         
         private String getActionName(String c) {
-            switch(c) {
-                case "0": return "Rock";
-                case "1": return "Paper";
-                case "2": return "Scissors";
-                default: return "Unknown";
-            }
+            if (c.equals("0")) { return "Rock"; }
+            if (c.equals("1")) { return "Paper"; }
+            if (c.equals("2")) { return "Scissors"; }
+            return "Unknown";
         }
 
         @Override
         public String evaluateWinner(String m1, String m2) {
-            if (m1.equals(m2)) return "DRAW";
+            if (m1.equals(m2)) {
+                return "DRAW";
+            }
             
             // map 0 = Rock, 1 = Paper, 2 = Scissors
-            if ((m1.equals("0") && m2.equals("2")) ||
-                (m1.equals("1") && m2.equals("0")) ||
-                (m1.equals("2") && m2.equals("1"))) {
+            if ((m1.equals("0") && m2.equals("2")) || (m1.equals("1") && m2.equals("0")) || (m1.equals("2") && m2.equals("1"))) {
                 return "P1";
             }
+            
             return "P2";
         }
         
@@ -319,8 +388,8 @@ public class RoshamboServer {
         @Override
         public void run() {
             try {
-                int p1RoundWins = 0;
-                int p2RoundWins = 0;
+                int p1Wins = 0;
+                int p2Wins = 0;
 
                 broadcast("=== STARTING 10 ROUND MATCH ===");
 
@@ -332,7 +401,8 @@ public class RoshamboServer {
 
                     String move1 = p1.in.readLine();
                     if (move1 == null || move1.equalsIgnoreCase("quit")) {
-                        notifyPlayerQuit(); break;
+                        notifyPlayerQuit(); 
+                        break;
                     }
 
                     p1.out.println("Move locked. Waiting for Player 2...");
@@ -340,15 +410,16 @@ public class RoshamboServer {
 
                     String move2 = p2.in.readLine();
                     if (move2 == null || move2.equalsIgnoreCase("quit")) {
-                        notifyPlayerQuit(); break;
+                        notifyPlayerQuit(); 
+                        break;
                     }
 
                     move1 = move1.trim().toLowerCase();
                     move2 = move2.trim().toLowerCase();
 
-                    if (!isValidMove(move1) || !isValidMove(move2)) {
+                    if (isValidMove(move1) == false || isValidMove(move2) == false) {
                         broadcast("Invalid inputs detected. Round nullified and repeating round.");
-                        round--; // Retry this round
+                        round--; // retry this round
                         continue;
                     }
                     
@@ -361,35 +432,41 @@ public class RoshamboServer {
                     if (resultString.equals("DRAW")) {
                         broadcast("It's a Tie! Both picked " + act1);
                     } else if (resultString.equals("P1")) {
-                        p1RoundWins++;
+                        p1Wins++;
                         p1.out.println("You won the round! " + act1 + " beats " + act2);
                         p2.out.println("You lost the round. " + act1 + " beats " + act2);
                     } else if (resultString.equals("P2")) {
-                        p2RoundWins++;
+                        p2Wins++;
                         p2.out.println("You won the round! " + act2 + " beats " + act1);
                         p1.out.println("You lost the round. " + act2 + " beats " + act1);
                     }
 
-                    broadcast("CURRENT SCORE: " + p1.loggedInUser.getUsername() + "[" + p1RoundWins + "] vs " + 
-                              p2.loggedInUser.getUsername() + "[" + p2RoundWins + "]");
+                    broadcast("CURRENT SCORE: " + p1.loggedInUser.getUsername() + "[" + p1Wins + "] vs " + 
+                              p2.loggedInUser.getUsername() + "[" + p2Wins + "]");
                 }
 
-                // Lab Constraint Logic Location - Handle final evaluation outside of round looping
                 String overallWinner;
-                if (p1RoundWins > p2RoundWins) {
+                
+                if (p1Wins > p2Wins) {
                     overallWinner = p1.loggedInUser.getUsername();
-                    updateScore(p1.loggedInUser, 1); 
-                } else if (p2RoundWins > p1RoundWins) {
+                    updatePlayerStats(p1.loggedInUser, true); 
+                    updatePlayerStats(p2.loggedInUser, false);
+                } else if (p2Wins > p1Wins) {
                     overallWinner = p2.loggedInUser.getUsername();
-                    updateScore(p2.loggedInUser, 1);
+                    updatePlayerStats(p2.loggedInUser, true);
+                    updatePlayerStats(p1.loggedInUser, false);
                 } else {
                     overallWinner = "Tie - No overall winner points awarded.";
+                    // it is a tie, so they both get +1 match played but neither gets +1 win tally
+                    updatePlayerStats(p1.loggedInUser, false);
+                    updatePlayerStats(p2.loggedInUser, false);
                 }
 
                 RoshamboResult matchFinalRecord = new RoshamboResult(
                     p1.loggedInUser.getUsername(),
                     p2.loggedInUser.getUsername(),
-                    p1RoundWins, p2RoundWins,
+                    p1Wins, 
+                    p2Wins,
                     overallWinner
                 );
 
@@ -399,12 +476,15 @@ public class RoshamboServer {
                 // displays global json scoreboard  
                 printLeaderboard(p1, p2); 
 
-            } catch (IOException e) {
+            } catch (Exception e) {
                 System.out.println("Connection failed mid-game.");
             } finally {
                 p1.out.println("Leaving Game Room. Sending you back to Menu.");
                 p2.out.println("Leaving Game Room. Sending you back to Menu.");
-                synchronized(p1) { p1.notify(); }
+                
+                synchronized(p1) { 
+                    p1.notify(); 
+                }
             }
         }
     }
