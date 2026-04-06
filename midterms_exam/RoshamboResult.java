@@ -1,4 +1,4 @@
-package com.roshambo;
+package com.roshambo.models;
 
 public class RoshamboResult {
     private String player1;

@@ -1,9 +1,8 @@
-package com.roshambo;
+package com.roshambo.services;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.roshambo.models.*;
+import com.google.gson.*; 
 import com.google.gson.reflect.TypeToken;
-import com.roshambo.RoshamboResult;
 
 import java.io.*;
 import java.net.*;
@@ -16,10 +15,62 @@ public class RoshamboServer {
     private static ArrayList<Player> users = new ArrayList<>();
     
     // instantiate gson object
-    private static Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    // implementing custom overrides forcing fields natively saving out as strings explicitly
+    private static Gson gson = new GsonBuilder()
+            .setPrettyPrinting()
+            // routing specific object structures ignoring standard java inheritance parameters
+            .registerTypeAdapter(Player.class, new JsonSerializer<Player>() {
+                @Override
+                public JsonElement serialize(Player src, Type typeOfSrc, JsonSerializationContext context) {
+                    JsonObject json = new JsonObject();
+                    json.addProperty("username", src.getUsername());
+                    json.addProperty("password", src.getPassword());
+                    json.addProperty("matches played", src.getMatchesPlayed());
+                    
+                    double exactWinRate = Math.round(src.getWinRate() * 10.0) / 10.0;
+                    json.addProperty("winrate", exactWinRate);
+                    return json;
+                }
+            })
+            // pushing strings back mathematically resolving states cleanly without failing out arrays
+            .registerTypeAdapter(Player.class, new JsonDeserializer<Player>() {
+                @Override
+                public Player deserialize(JsonElement jsonElem, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+                    JsonObject obj = jsonElem.getAsJsonObject();
+                    
+                    String un = obj.has("username") ? obj.get("username").getAsString() : "unknown";
+                    String pw = obj.has("password") ? obj.get("password").getAsString() : "";
+                    
+                    int mp = 0;
+                    if (obj.has("matches played")) mp = obj.get("matches played").getAsInt();
+                    else if (obj.has("matchesPlayed")) mp = obj.get("matchesPlayed").getAsInt(); // gracefully checks deprecated formatting types
+                    
+                    int computedWins = 0;
+                    if (obj.has("winrate")) {
+                        double wr = obj.get("winrate").getAsDouble();
+                        // recalculating missing match score based solely off percentages implicitly protecting system loads
+                        computedWins = (int) Math.round((wr / 100.0) * mp); 
+                    } else if (obj.has("score")) {
+                        computedWins = obj.get("score").getAsInt();
+                    }
+                    
+                    return new Player(un, pw, computedWins, mp);
+                }
+            })
+            .create();
     
     // holding slot for the player waiting for a matchmaking game
     private static ClientHandler waitingPlayer = null;
+
+    // ansi string layouts handling server aesthetics dynamically masking client requests properly 
+    public static final String RESET = "\u001B[0m";
+    public static final String BOLD = "\u001B[1m";
+    public static final String RED = "\u001B[31m";
+    public static final String GREEN = "\u001B[32m";
+    public static final String YELLOW = "\u001B[33m";
+    public static final String BLUE = "\u001B[34m";
+    public static final String MAGENTA = "\u001B[35m";
+    public static final String CYAN = "\u001B[36m";
 
     public static void main(String[] args) {
         int port = 6767;
@@ -27,18 +78,18 @@ public class RoshamboServer {
 
         try {
             ServerSocket server = new ServerSocket(port);
-            System.out.println("Roshambo Matchmaking Server Online! Listening on port " + port);
+            System.out.println(CYAN + "Roshambo Matchmaking Server Online! Listening on port " + port + RESET);
 
             while (true) {
                 Socket client = server.accept();
-                System.out.println("New player connected: " + client.getInetAddress().getHostAddress());
+                System.out.println(GREEN + "New player connected: " + client.getInetAddress().getHostAddress() + RESET);
                 
                 ClientHandler ch = new ClientHandler(client);
                 Thread thread = new Thread(ch);
                 thread.start();
             }
         } catch (Exception e) {
-            System.out.println("Server exception: ");
+            System.out.println(RED + "Server exception: " + RESET);
             e.printStackTrace();
         }
     }
@@ -47,7 +98,8 @@ public class RoshamboServer {
     public static synchronized void saveUsers() {
         try {
             FileWriter writer = new FileWriter(JSON_FILE);
-            gson.toJson(users, writer); // automatically writes the entire array as json to the file
+            // automatically writes the entire array as json to the file
+            gson.toJson(users, writer); 
             writer.close();
         } catch (IOException e) {
             System.out.println("Error saving user state locally.");
@@ -107,9 +159,8 @@ public class RoshamboServer {
         user.setMatchesPlayed(user.getMatchesPlayed() + 1);
         
         // increase their score (win tally) only if they actually won
-        if (isWinner == true) {
-            int current = user.getScore();
-            user.setScore(current + 1);
+        if (isWinner) {
+            user.incrementScore(); // securely updating through model rules 
         }
         
         saveUsers();
@@ -127,42 +178,38 @@ public class RoshamboServer {
                 
                 // sort highest to lowest win rate
                 if (winRateA < winRateB) {
-                    Player temp = sortedUsers.get(i);
-                    sortedUsers.set(i, sortedUsers.get(j));
-                    sortedUsers.set(j, temp);
+                    Collections.swap(sortedUsers, i, j);
                 } 
                 // if there is a tie, let the player with more actual games played take higher rank
                 else if (winRateA == winRateB) {
-                    int gamesA = sortedUsers.get(i).getMatchesPlayed();
-                    int gamesB = sortedUsers.get(j).getMatchesPlayed();
-                    
-                    if (gamesA < gamesB) {
-                        Player temp = sortedUsers.get(i);
-                        sortedUsers.set(i, sortedUsers.get(j));
-                        sortedUsers.set(j, temp);
+                    if (sortedUsers.get(i).getMatchesPlayed() < sortedUsers.get(j).getMatchesPlayed()) {
+                        Collections.swap(sortedUsers, i, j);
                     }
                 }
             }
         }
         
-        String lb = "\n=== GLOBAL LEADERBOARD (WIN RATE) ===\n";
-        int rank = 1;
+        StringBuilder lb = new StringBuilder();
+        lb.append("\n").append(MAGENTA).append(BOLD).append("GLOBAL LEADERBOARD (WIN RATE)\n").append(RESET);
+        lb.append(MAGENTA).append("─────────────────────────────────────\n").append(RESET);
         
+        int rank = 1;
         for (int i = 0; i < sortedUsers.size(); i++) {
             Player p = sortedUsers.get(i);
             
             // round the win rate to 1 decimal place for display purposes
-            double wrRaw = p.getWinRate();
-            double roundedWr = Math.round(wrRaw * 10.0) / 10.0;
+            double roundedWr = Math.round(p.getWinRate() * 10.0) / 10.0;
             
-            lb += rank + ". " + p.getUsername() + " - " + roundedWr + "% (" + p.getScore() + "W / " + p.getMatchesPlayed() + " Total)\n";
+            String color = (rank == 1) ? YELLOW : (rank == 2) ? CYAN : RESET;
+            lb.append(color).append(rank).append(". ").append(p.getUsername())
+              .append(" - ").append(roundedWr).append("% (")
+              .append(p.getScore()).append("W / ").append(p.getMatchesPlayed()).append(" Total)\n").append(RESET);
             rank++;
         }
+        lb.append(MAGENTA).append("─────────────────────────────────────\n").append(RESET);
         
-        lb += "=====================================\n";
-        
-        p1.out.println(lb);
-        p2.out.println(lb);
+        p1.out.println(lb.toString());
+        p2.out.println(lb.toString());
     }
 
     // client handler class manages all interactions with a connected client, including login, registration, matchmaking, and gameplay
@@ -183,13 +230,17 @@ public class RoshamboServer {
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 out = new PrintWriter(socket.getOutputStream(), true);
 
-                out.println("Connection Established!");
+                out.println(GREEN + "Connection Established!" + RESET);
 
                 boolean running = true;
-                while (running == true) {
-                    out.println("\n--- ROSHAMBO PVP SERVER ---");
-                    out.println("1. Login\n2. Create an Account\n3. Quit");
-                    out.println("Option: ");
+                while (running) {
+                    out.println("\n" + CYAN + "╔══════════════════════════════╗");
+                    out.println("║    " + BOLD + "ROSHAMBO PvP SERVER" + RESET + CYAN + "       ║");
+                    out.println("╚══════════════════════════════╝" + RESET);
+                    out.println(" 1. Login");
+                    out.println(" 2. Create an Account");
+                    out.println(" 3. Quit");
+                    out.println("\nOption:");
                     out.println("INPUT_REQUIRED");
 
                     String choice = in.readLine();
@@ -200,7 +251,7 @@ public class RoshamboServer {
                     switch (choice) {
                         case "1":
                             boolean logged = executeLogin();
-                            if (logged == true) {
+                            if (logged) {
                                 runMainMenu();
                             }
                             break;
@@ -212,13 +263,13 @@ public class RoshamboServer {
                             running = false;
                             break;
                         default:
-                            out.println("Invalid selection.");
+                            out.println(RED + "Invalid selection." + RESET);
                     }
                 }
                 socket.close();
 
             } catch (IOException e) {
-                System.out.println("A player dropped connection.");
+                System.out.println(RED + "A player dropped connection." + RESET);
             } finally {
                 synchronized (RoshamboServer.class) {
                     if (waitingPlayer == this) {
@@ -230,39 +281,51 @@ public class RoshamboServer {
 
         // executelogin handles the login flow, prompting for credentials and authenticating against the user list
         private boolean executeLogin() throws IOException {
-            out.println("Username: ");
+            out.println("\nUsername:");
             out.println("INPUT_REQUIRED");
             String username = in.readLine();
 
-            out.println("Password: ");
+            out.println("Password:");
             out.println("INPUT_REQUIRED");
             String pw = in.readLine();
+            
+            // basic input validation blocking blank spaces preventing server array corruption
+            if (username == null || username.trim().isEmpty() || pw == null || pw.trim().isEmpty()) {
+                out.println(RED + "Error: username or password cannot be empty." + RESET);
+                return false;
+            }
 
             Player authResult = authenticate(username, pw);
             if (authResult != null) {
                 loggedInUser = authResult;
-                out.println("Login Successful!");
+                out.println(GREEN + "Login Successful!" + RESET);
                 return true;
             }
             
-            out.println("Incorrect login credentials.");
+            out.println(RED + "Incorrect login credentials." + RESET);
             return false;
         }
 
         // executetegister manages the account creation process, ensuring unique usernames and adding new users to the system
         private void executeRegister() throws IOException {
-            out.println("Enter New Username: ");
+            out.println("\nEnter New Username:");
             out.println("INPUT_REQUIRED");
             String username = in.readLine();
             
-            out.println("Enter New Password: ");
+            out.println("Enter New Password:");
             out.println("INPUT_REQUIRED");
             String pass = in.readLine();
             
+            // standard school friendly string checking verifying fields aren't completely blank spaces 
+            if (username == null || username.trim().isEmpty() || pass == null || pass.trim().isEmpty()) {
+                out.println(RED + "Registration failed! Please use real characters." + RESET);
+                return;
+            }
+            
             if(registerUser(username, pass)) {
-                out.println("Account created! Please log in.");
+                out.println(GREEN + "Account created! Please log in." + RESET);
             } else {
-                out.println("That username is already taken!");
+                out.println(RED + "That username is already taken!" + RESET);
             }
         }
 
@@ -272,22 +335,26 @@ public class RoshamboServer {
                 double dispRateRaw = loggedInUser.getWinRate();
                 double dispRateRound = Math.round(dispRateRaw * 10.0) / 10.0;
                 
-                out.println("\n[ WELCOME " + loggedInUser.getUsername().toUpperCase() + " | WIN RATE: " + dispRateRound + "% ]");
-                out.println("1. Find Match (PvP)\n2. Logout");
-                out.println("Choice: ");
+                out.println("\n" + BLUE + "╭──────────────────────────────────────────╮");
+                out.println("│  " + BOLD + "PLAYER:" + RESET + " " + String.format("%-31s", loggedInUser.getUsername().toUpperCase()) + BLUE + "│");
+                out.println("│  " + BOLD + "WIN RATE:" + RESET + " " + String.format("%-29s", dispRateRound + "%") + BLUE + "│");
+                out.println("╰──────────────────────────────────────────╯" + RESET);
+                out.println(" 1. Find Match (PvP)");
+                out.println(" 2. Logout");
+                out.println("\nChoice:");
                 out.println("INPUT_REQUIRED");
 
                 String select = in.readLine();
                 if(select == null) return;
                 
                 if (select.equals("1")) {
-                    out.println("Entering matchmaking queue...");
+                    out.println(YELLOW + "Entering matchmaking queue..." + RESET);
                     findOpponent();
                 } else if (select.equals("2")) {
                     out.println("Logging out.");
                     loggedInUser = null;
                 } else {
-                    out.println("Invalid choice.");
+                    out.println(RED + "Invalid choice." + RESET);
                 }
             }
         }
@@ -306,15 +373,16 @@ public class RoshamboServer {
             }
 
             if (opponent != null) {
-                out.println("Match found! You are playing against " + opponent.loggedInUser.getUsername());
-                opponent.out.println("Match found! You are playing against " + this.loggedInUser.getUsername());
+                out.println(GREEN + BOLD + "Match found! You are playing against " + opponent.loggedInUser.getUsername() + RESET);
+                opponent.out.println(GREEN + BOLD + "Match found! You are playing against " + this.loggedInUser.getUsername() + RESET);
 
-                TwoPlayerGame match = new RoshamboMatch(opponent, this);
+                // fires off strictly mapped state encapsulation instead of legacy math calls 
+                GameSession match = new GameSession(opponent, this);
                 match.run(); 
 
             } else {
                 try {
-                    out.println("Waiting for an opponent to join...");
+                    out.println(YELLOW + "Waiting for an opponent to join..." + RESET);
                     synchronized (this) {
                         this.wait(); 
                     }
@@ -325,63 +393,31 @@ public class RoshamboServer {
         }
     }
 
-    // twoplayergame is an abstract class that defines the structure for any two-player game, including methods for broadcasting messages, handling player quits, validating moves, and evaluating winners. RoshamboMatch extends this class to implement the specific logic for Rock-Paper-Scissors.
-    public static abstract class TwoPlayerGame implements Runnable {
-        protected ClientHandler p1;
-        protected ClientHandler p2;
+    // handles logic locking completely stopping data pollution out from core threading logic 
+    private static class GameSession implements Runnable {
+        private ClientHandler p1;
+        private ClientHandler p2;
 
-        public TwoPlayerGame(ClientHandler p1, ClientHandler p2) {
+        public GameSession(ClientHandler p1, ClientHandler p2) {
             this.p1 = p1;
             this.p2 = p2;
         }
 
-        protected void broadcast(String msg) {
+        private void broadcast(String msg) {
             p1.out.println(msg);
             p2.out.println(msg);
         }
 
-        protected void notifyPlayerQuit() {
-            broadcast("Someone has surrendered/left.");
+        private void notifyPlayerQuit() {
+            broadcast(RED + "[!] Someone has surrendered/left the game." + RESET);
         }
 
-        public abstract boolean isValidMove(String move);
-        public abstract String evaluateWinner(String m1, String m2);
-    }
-
-    // roshambomatch implements the specific game logic for roshambo, including move validation, winner evaluation, and the main game loop that handles player interactions and score updates
-    public static class RoshamboMatch extends TwoPlayerGame {
-        
-        public RoshamboMatch(ClientHandler p1, ClientHandler p2) {
-            super(p1, p2); 
-        }
-
-        @Override
-        public boolean isValidMove(String c) {
-            if (c.equals("0") || c.equals("1") || c.equals("2")) {
-                return true;
-            }
-            return false;
-        }
-        
-        private String getActionName(String c) {
-            if (c.equals("0")) { return "Rock"; }
-            if (c.equals("1")) { return "Paper"; }
-            if (c.equals("2")) { return "Scissors"; }
-            return "Unknown";
-        }
-
-        @Override
-        public String evaluateWinner(String m1, String m2) {
-            if (m1.equals(m2)) {
-                return "DRAW";
-            }
-            
-            // map 0 = Rock, 1 = Paper, 2 = Scissors
-            if ((m1.equals("0") && m2.equals("2")) || (m1.equals("1") && m2.equals("0")) || (m1.equals("2") && m2.equals("1"))) {
-                return "P1";
-            }
-            
-            return "P2";
+        // securely checks and pushes plain texts converting logic models polymorphism requirements gracefully 
+        private GameMove parseMove(String input) {
+            if (input.equals("0")) { return new Rock(); }
+            if (input.equals("1")) { return new Paper(); }
+            if (input.equals("2")) { return new Scissors(); }
+            return null; // implicitly manages strict format validation dropping out errors nicely 
         }
         
         // main game loop for the roshambo game, handling move input, validation, result evaluation, score updates, and showing results to both players
@@ -391,58 +427,95 @@ public class RoshamboServer {
                 int p1Wins = 0;
                 int p2Wins = 0;
 
-                broadcast("=== STARTING 10 ROUND MATCH ===");
+                broadcast("\n" + YELLOW + BOLD + "╔════════════════════════════════╗");
+                broadcast("║  === MATCH IS STARTING! ===    ║");
+                broadcast("║      BEST OF 10 ROUNDS         ║");
+                broadcast("╚════════════════════════════════╝" + RESET);
 
                 // game loop continues until a player quits or disconnects, handling move input and result evaluation each round
                 for(int round = 1; round <= 10; round++) {
-                    broadcast("\n-- ROUND " + round + " --");
-                    p2.out.println("Waiting for Player 1 to make a move...");
-                    p1.out.println("\nYOUR_TURN_RPS");
+                    broadcast("\n" + CYAN + "╭──────── ROUND " + round + " ────────╮" + RESET);
+                    
+                    // natively unblocking prompts launching asynchronous string retrievals evenly 
+                    broadcast("YOUR_TURN_RPS");
 
-                    String move1 = p1.in.readLine();
-                    if (move1 == null || move1.equalsIgnoreCase("quit")) {
-                        notifyPlayerQuit(); 
-                        break;
-                    }
+                    // mapping string responses wrapping individual background thread containers implicitly 
+                    String[] moves = new String[2];
 
-                    p1.out.println("Move locked. Waiting for Player 2...");
-                    p2.out.println("\nYOUR_TURN_RPS"); 
+                    Thread t1 = new Thread(() -> {
+                        try {
+                            moves[0] = p1.in.readLine();
+                            // securely masking client screen immediately acknowledging responses properly 
+                            if (moves[0] != null && !moves[0].equalsIgnoreCase("quit")) {
+                                p1.out.println(YELLOW + "Move locked. Waiting for opponent..." + RESET);
+                            }
+                        } catch (IOException e) { moves[0] = null; }
+                    });
 
-                    String move2 = p2.in.readLine();
-                    if (move2 == null || move2.equalsIgnoreCase("quit")) {
+                    Thread t2 = new Thread(() -> {
+                        try {
+                            moves[1] = p2.in.readLine();
+                            // securely masking client screen immediately acknowledging responses properly 
+                            if (moves[1] != null && !moves[1].equalsIgnoreCase("quit")) {
+                                p2.out.println(YELLOW + "Move locked. Waiting for opponent..." + RESET);
+                            }
+                        } catch (IOException e) { moves[1] = null; }
+                    });
+
+                    t1.start();
+                    t2.start();
+                    
+                    // barricades game process explicitly waiting out string completions universally
+                    t1.join();
+                    t2.join();
+
+                    String move1 = moves[0];
+                    String move2 = moves[1];
+
+                    if (move1 == null || move1.equalsIgnoreCase("quit") || move2 == null || move2.equalsIgnoreCase("quit")) {
                         notifyPlayerQuit(); 
                         break;
                     }
 
                     move1 = move1.trim().toLowerCase();
                     move2 = move2.trim().toLowerCase();
+                    
+                    GameMove m1obj = parseMove(move1);
+                    GameMove m2obj = parseMove(move2);
 
-                    if (isValidMove(move1) == false || isValidMove(move2) == false) {
-                        broadcast("Invalid inputs detected. Round nullified and repeating round.");
-                        round--; // retry this round
+                    if (m1obj == null || m2obj == null) {
+                        broadcast(RED + "Invalid inputs detected. Round nullified and repeating." + RESET);
+                        // retry this round gracefully trapping incorrect terminal presses
+                        round--; 
                         continue;
                     }
                     
-                    String act1 = getActionName(move1);
-                    String act2 = getActionName(move2);
+                    // assign dynamically parsed choices deeply internally checking parameters
+                    p1.loggedInUser.setCurrentMove(m1obj);
+                    p2.loggedInUser.setCurrentMove(m2obj);
 
-                    String resultString = evaluateWinner(move1, move2);
-                    broadcast("--- ROUND RESULTS ---");
+                    // abstracts out mathematics utilizing polymorphic checking naturally passing states 
+                    int compRes = p1.loggedInUser.getCurrentMove().compare(p2.loggedInUser.getCurrentMove());
                     
-                    if (resultString.equals("DRAW")) {
-                        broadcast("It's a Tie! Both picked " + act1);
-                    } else if (resultString.equals("P1")) {
+                    String act1 = p1.loggedInUser.getCurrentMove().getMoveName();
+                    String act2 = p2.loggedInUser.getCurrentMove().getMoveName();
+
+                    broadcast("\n" + BLUE + "     --- RESULTS ---     " + RESET);
+                    
+                    if (compRes == 0) {
+                        broadcast(YELLOW + "It's a Tie! Both picked " + act1 + RESET);
+                    } else if (compRes == 1) {
                         p1Wins++;
-                        p1.out.println("You won the round! " + act1 + " beats " + act2);
-                        p2.out.println("You lost the round. " + act1 + " beats " + act2);
-                    } else if (resultString.equals("P2")) {
+                        p1.out.println(GREEN + "You won the round! " + act1 + " beats " + act2 + RESET);
+                        p2.out.println(RED + "You lost the round. " + act1 + " beats " + act2 + RESET);
+                    } else if (compRes == -1) {
                         p2Wins++;
-                        p2.out.println("You won the round! " + act2 + " beats " + act1);
-                        p1.out.println("You lost the round. " + act2 + " beats " + act1);
+                        p2.out.println(GREEN + "You won the round! " + act2 + " beats " + act1 + RESET);
+                        p1.out.println(RED + "You lost the round. " + act2 + " beats " + act1 + RESET);
                     }
 
-                    broadcast("CURRENT SCORE: " + p1.loggedInUser.getUsername() + "[" + p1Wins + "] vs " + 
-                              p2.loggedInUser.getUsername() + "[" + p2Wins + "]");
+                    broadcast(CYAN + "SCORE: " + p1.loggedInUser.getUsername() + "[" + p1Wins + "] vs " + 
+                              p2.loggedInUser.getUsername() + "[" + p2Wins + "]" + RESET);
                 }
 
                 String overallWinner;
@@ -462,25 +535,25 @@ public class RoshamboServer {
                     updatePlayerStats(p2.loggedInUser, false);
                 }
 
-                RoshamboResult matchFinalRecord = new RoshamboResult(
-                    p1.loggedInUser.getUsername(),
-                    p2.loggedInUser.getUsername(),
-                    p1Wins, 
-                    p2Wins,
-                    overallWinner
-                );
-
-                broadcast("\n===== THE 10 ROUND MATCH IS OVER! =====");
-                broadcast(matchFinalRecord.getFormattedSummary());
+                broadcast("\n" + YELLOW + BOLD + "╔═════════════════════════════════════════╗");
+                broadcast("║       THE 10 ROUND MATCH IS OVER!       ║");
+                broadcast("╚═════════════════════════════════════════╝" + RESET);
+                
+                String p1Color = (p1Wins > p2Wins) ? GREEN : (p1Wins < p2Wins) ? RED : YELLOW;
+                String p2Color = (p2Wins > p1Wins) ? GREEN : (p2Wins < p1Wins) ? RED : YELLOW;
+                
+                broadcast(p1Color + p1.loggedInUser.getUsername() + "[" + p1Wins + " pts]" + RESET + BOLD + " VS " + RESET +
+                          p2Color + p2.loggedInUser.getUsername() + " [" + p2Wins + " pts]" + RESET);
+                broadcast(YELLOW + "WINNER: " + overallWinner + RESET);
                 
                 // displays global json scoreboard  
                 printLeaderboard(p1, p2); 
 
             } catch (Exception e) {
-                System.out.println("Connection failed mid-game.");
+                System.out.println(RED + "Connection failed mid-game." + RESET);
             } finally {
-                p1.out.println("Leaving Game Room. Sending you back to Menu.");
-                p2.out.println("Leaving Game Room. Sending you back to Menu.");
+                p1.out.println(BLUE + "Leaving Game Room. Sending you back to Menu." + RESET);
+                p2.out.println(BLUE + "Leaving Game Room. Sending you back to Menu." + RESET);
                 
                 synchronized(p1) { 
                     p1.notify(); 

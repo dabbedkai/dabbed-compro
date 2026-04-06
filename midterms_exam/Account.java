@@ -1,4 +1,4 @@
-package com.roshambo;
+package com.roshambo.models;
 
 // abstraction class to represent common account properties and behaviors for both User and Admin
 public abstract class Account {
