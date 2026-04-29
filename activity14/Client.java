@@ -5,8 +5,8 @@ import java.net.*;
 import java.util.*;
 
 public class Client {
-    private static final String HOST = "localhost";
-    private static final int PORT = 8000;
+    private static final String HOST = "192.168.108.198";
+    private static final int PORT = 6767;
 
     public static void main(String[] args) {
         try (
