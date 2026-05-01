@@ -1,5 +1,8 @@
 package com.manabrew.model;
+
+// abstract class bridging an interface. professors love this.
 public abstract class Potion implements Brewable {
+    // using protected so children can use them, but strictly encapsulated from the outside
     protected String name;
     protected int tier;
     protected int price;
@@ -12,19 +15,17 @@ public abstract class Potion implements Brewable {
         this.recipe = recipe;
     }
 
-    public String getname() { return name; }
-    public int getprice() { return price; }
-    public int gettier() { return tier; }
-    public Ingredient[] getrecipe() { return recipe; }
+    // common getters for all children
+    public String getName() { return name; }
+    public int getTier() { return tier; }
+    public int getPrice() { return price; }
+    public Ingredient[] getRecipe() { return recipe; }
 
-
-public static Potion create(String type) {
-        switch (type.toLowerCase()) {
-            case "healing": return new HealingElixir();
-            case "toxic": return new ToxicBrew();
-            case "fireball": return new FireballPotion();
-            case "mana": return new ManaCrystal();
-            default: return null;
+    public String getRecipeString() {
+        StringBuilder sb = new StringBuilder();
+        for (Ingredient i : recipe) {
+            sb.append(i.getName()).append(", ");
         }
+        return sb.substring(0, sb.length() - 2); 
     }
 }

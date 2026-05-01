@@ -1,14 +1,12 @@
 package com.manabrew.model;
 
 public interface Brewable {
-    // default method for time calculation
-    default int calculatebrewtime(int tier) {
-        return tier * 2;
+    default int calculateBrewTime(int tier) {
+        return tier * 3; 
     }
 
-    // static utility to check explosions
-    static boolean isvolatile(Ingredient a, Ingredient b) {
-        return (a.getname().equals("dragon scale") && b.getname().equals("fairy dust")) ||
-               (a.getname().equals("fairy dust") && b.getname().equals("dragon scale"));
+    static boolean isVolatile(String a, String b) {
+        return (a.equals("dragon scale") && b.equals("fairy dust")) ||
+               (a.equals("fairy dust") && b.equals("dragon scale"));
     }
 }

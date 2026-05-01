@@ -35,7 +35,7 @@ public class ClientHandler implements Runnable {
             // waits here until the player hits enter
             playerName = in.readLine();
             
-            // NOW we plug them into the chaos of the active kitchen
+            // now we plug them into the chaos of the active kitchen
             Server.addPlayer(this);
             Server.broadcast(TerminalColors.YELLOW + "[ LOGIN ] " + playerName + " entered the kitchen!" + TerminalColors.RESET);
             out.println("Syntax: brew <ingredient1>, <ingredient2> (e.g. 'brew dragon scale, fairy dust')\n");

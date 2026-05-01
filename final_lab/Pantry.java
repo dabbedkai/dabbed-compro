@@ -1,29 +1,34 @@
 package com.manabrew.inventory;
-
-import com.manabrew.model.ingredient; // pulling from the model folder
+import com.manabrew.model.Ingredient;
 import java.util.HashMap;
 
 public class Pantry {
     private HashMap<String, Integer> stock = new HashMap<>();
 
     public Pantry() {
-        stock.put("water", 100);
-        stock.put("dragon scale", 2); 
-        stock.put("fairy dust", 50);
-        stock.put("fire pepper", 15); // new ingredient
+        // buffed starting stock, we kept running out during testing
+        stock.put("water", 500);
+        stock.put("dragon scale", 200); 
+        stock.put("fairy dust", 200);
+        stock.put("fire pepper", 200); 
     }
 
-    // synchronized to prevent race conditions from multiple players
-    public synchronized boolean takeingredients(Ingredient[] reqs) {
-        // verify stock first
-        for (Ingredient i : reqs) {
-            if (stock.getOrDefault(i.getname(), 0) <= 0) {
-                return false;
+    // heavily locked down to stop 2 players from duping ingredients at the same time
+    public synchronized boolean takeIngredients(String[] stuffWanted) {
+        // sanity check loop
+        for (String item : stuffWanted) {
+            item = item.trim();
+            if (stock.getOrDefault(item, 0) <= 0) {
+                return false; 
             }
         }
-        // deduct stock
-        for (Ingredient i : reqs) {
-            stock.put(i.getname(), stock.get(i.getname()) - 1);
+        
+        // actual deduction loop
+        for (String item : stuffWanted) {
+            item = item.trim();
+            int currentQty = stock.get(item);
+            stock.put(item, currentQty - 1);
+            // System.out.println("debug: " + item + " taken. left: " + (currentQty - 1));
         }
         return true;
     }

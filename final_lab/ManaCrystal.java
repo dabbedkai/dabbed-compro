@@ -7,3 +7,4 @@ public class ManaCrystal extends Potion {
             new Ingredient("fairy dust") 
         });
     }
+}

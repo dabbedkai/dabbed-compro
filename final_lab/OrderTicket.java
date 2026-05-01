@@ -1,13 +1,16 @@
 package com.manabrew.model;
 
 public class OrderTicket {
-    private String potionname;
+    private Potion targetPotion; // uses the base reference class
+    private int timeLeft; 
 
-    public OrderTicket(String potionname) {
-        this.potionname = potionname;
+    public OrderTicket(Potion targetPotion, int maxTime) {
+        this.targetPotion = targetPotion;
+        this.timeLeft = maxTime;
     }
 
-    public String getpotionname() {
-        return potionname;
-    }
+    public Potion getPotion() { return targetPotion; }
+    public int getTimeLeft() { return timeLeft; }
+    
+    public void tickTimer() { this.timeLeft--; }
 }

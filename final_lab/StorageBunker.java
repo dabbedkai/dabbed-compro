@@ -1,21 +1,21 @@
 package com.manabrew.inventory;
-
 import java.util.ArrayList;
 
-// generic class
-public class StorageBunker<t> {
-    private ArrayList<t> items = new ArrayList<>();
+// the generic class requirement for the rubric
+public class StorageBunker<T> {
+    private ArrayList<T> items = new ArrayList<>();
 
-    public synchronized void add(t item) {
+    public synchronized void add(T item) {
         items.add(item);
     }
 
-    public synchronized t take() {
-        if (items.isEmpty()) return null;
-        return items.remove(0);
+    public synchronized boolean remove(T item) {
+        return items.remove(item);
     }
 
-    public synchronized int size() {
-        return items.size();
+    // this snapshot method is needed because iterating over a list while a client
+    // deletes something out of it crashes the whole game (ConcurrentModificationException lol)
+    public synchronized ArrayList<T> getSnapshot() {
+        return new ArrayList<>(items); 
     }
 }
